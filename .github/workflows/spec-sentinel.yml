@@ -34,7 +34,7 @@ jobs:
         uses: ./.spec-sentinel-action
         with:
           repository-root: target
-          path: .
+          path: examples/drifted-shop
           github-token: ${{ github.token }}
           fail-on-new-divergence: "false"
         env:
