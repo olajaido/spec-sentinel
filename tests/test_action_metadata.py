@@ -3,9 +3,10 @@ import subprocess
 from pathlib import Path
 
 import yaml
+from openai import OpenAIError
 from typer.testing import CliRunner
 
-from spec_sentinel.cli import app
+from spec_sentinel.cli import _openai_error_summary, app
 
 ROOT = Path(__file__).parents[1]
 
@@ -21,6 +22,11 @@ def test_composite_action_is_pinned_and_disables_untrusted_dotenv() -> None:
     scan_commands = [step["run"] for step in steps if "Scan" in step["name"]]
     assert scan_commands
     assert all("--no-load-dotenv" in command for command in scan_commands)
+    current_scan = next(step for step in steps if step["name"] == "Scan current checkout")
+    assert "OPENAI_API_KEY is unavailable" in current_scan["run"]
+    assert "could not complete the current scan" in current_scan["run"]
+    setup_uv = next(step for step in steps if step["name"] == "Set up uv")
+    assert setup_uv["with"]["cache-dependency-glob"] == "${{ github.action_path }}/uv.lock"
     comment_step = next(
         step for step in steps if step["name"] == "Update persistent pull-request comment"
     )
@@ -57,3 +63,12 @@ def test_explicit_env_file_cannot_be_combined_with_disabled_dotenv(tmp_path: Pat
 
     assert invocation.exit_code == 2
     assert "cannot be combined" in invocation.output
+
+
+def test_openai_error_summary_never_echoes_provider_message() -> None:
+    error = OpenAIError("secret-bearing provider message")
+
+    summary = _openai_error_summary(error)
+
+    assert summary == "OpenAIError"
+    assert "secret-bearing" not in summary

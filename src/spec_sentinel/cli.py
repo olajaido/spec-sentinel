@@ -20,6 +20,16 @@ from spec_sentinel.pipeline import ProgressEvent, ScanArtifacts, run_scan
 app = typer.Typer(no_args_is_help=True, help="Audit documentation claims against code.")
 console = Console()
 progress_console = Console(stderr=True)
+error_console = Console(stderr=True)
+
+
+def _openai_error_summary(error: OpenAIError) -> str:
+    """Return diagnostic metadata without echoing credentials from provider messages."""
+    summary = type(error).__name__
+    status_code = getattr(error, "status_code", None)
+    if isinstance(status_code, int):
+        summary += f" (HTTP {status_code})"
+    return summary
 
 
 def version_callback(value: bool) -> None:
@@ -63,8 +73,13 @@ def _execute_scan(
             progress=_print_progress if show_progress else None,
         )
     except OpenAIError as error:
-        console.print(f"[bold red]OpenAI configuration error:[/bold red] {error}")
-        console.print("Set OPENAI_API_KEY or rerun with --no-agentic.")
+        error_console.print(
+            f"[bold red]OpenAI request failed:[/bold red] {_openai_error_summary(error)}"
+        )
+        error_console.print(
+            "Check OPENAI_API_KEY, model access, API quota, and network connectivity; "
+            "or rerun with --no-agentic."
+        )
         raise typer.Exit(code=2) from error
     except ValueError as error:
         raise typer.BadParameter(str(error), param_hint="--cache-dir") from error

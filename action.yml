@@ -47,6 +47,7 @@ runs:
         version: "0.11.16"
         python-version: "3.12"
         enable-cache: "true"
+        cache-dependency-glob: ${{ github.action_path }}/uv.lock
         github-token: ""
 
     - name: Install Spec Sentinel
@@ -128,12 +129,19 @@ runs:
         REPORT_PATH: ${{ steps.paths.outputs.current-report }}
         VERDICT_CACHE: ${{ steps.paths.outputs.verdict-cache }}
       run: |
+        if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+          echo "::error::OPENAI_API_KEY is unavailable to the Spec Sentinel Action." >&2
+          exit 2
+        fi
         cd "$REPOSITORY_ROOT"
         args=(scan "$SCAN_PATH" --agentic --format json --no-load-dotenv --cache-dir "$VERDICT_CACHE")
         if [[ -n "$CONFIG_PATH" ]]; then
           args+=(--config "$CONFIG_PATH")
         fi
-        spec-sentinel "${args[@]}" > "$REPORT_PATH"
+        if ! spec-sentinel "${args[@]}" > "$REPORT_PATH"; then
+          echo "::error::Spec Sentinel could not complete the current scan." >&2
+          exit 2
+        fi
 
     - name: Stage default-branch baseline
       if: ${{ github.event_name == 'push' }}
@@ -184,7 +192,10 @@ runs:
         if [[ -n "$CONFIG_PATH" ]]; then
           args+=(--config "$CONFIG_PATH")
         fi
-        spec-sentinel "${args[@]}" > "$REPORT_PATH"
+        if ! spec-sentinel "${args[@]}" > "$REPORT_PATH"; then
+          echo "::error::Spec Sentinel could not complete the cold baseline scan." >&2
+          exit 2
+        fi
 
     - name: Save cold baseline
       if: ${{ github.event_name == 'pull_request' && steps.baseline-cache.outputs.cache-hit != 'true' }}
