@@ -21,6 +21,11 @@ def test_composite_action_is_pinned_and_disables_untrusted_dotenv() -> None:
     scan_commands = [step["run"] for step in steps if "Scan" in step["name"]]
     assert scan_commands
     assert all("--no-load-dotenv" in command for command in scan_commands)
+    comment_step = next(
+        step for step in steps if step["name"] == "Update persistent pull-request comment"
+    )
+    assert "getAuthenticated" not in comment_step["with"]["script"]
+    assert "github-actions[bot]" in comment_step["with"]["script"]
     for step in steps:
         if command := step.get("run"):
             subprocess.run(["bash", "-n", "-c", command], check=True)
