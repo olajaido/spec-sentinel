@@ -12,10 +12,6 @@ paths:
     get:
       operationId: list_products
       parameters:
-        - name: category
-          in: query
-          required: false
-          schema: {type: [string, "null"]}
         - name: page_size
           in: query
           required: false

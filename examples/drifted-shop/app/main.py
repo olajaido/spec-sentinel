@@ -26,11 +26,9 @@ def health() -> dict[str, str]:
 
 @app.get("/v1/products", response_model=list[Product])
 def list_products(
-    category: str | None = None,
     page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
 ) -> list[Product]:
-    products = list(PRODUCTS.values())[:page_size]
-    return [product for product in products if category is None or product.category == category]
+    return list(PRODUCTS.values())[:page_size]
 
 
 @app.get("/v1/products/{product_id}", response_model=Product)
