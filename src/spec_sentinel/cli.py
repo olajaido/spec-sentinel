@@ -183,7 +183,9 @@ def scan(
         agentic=agentic,
         use_cache=use_cache,
         load_env=load_env,
-        show_progress=agentic and format == "term",
+        # Progress is written to stderr, so it remains visible in CI while JSON
+        # stdout can still be redirected to a machine-readable report file.
+        show_progress=agentic,
     )
     if format == "json":
         typer.echo(json.dumps(artifacts.as_dict(), indent=2))

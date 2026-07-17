@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -7,6 +8,7 @@ from openai import OpenAIError
 from typer.testing import CliRunner
 
 from spec_sentinel.cli import _openai_error_summary, app
+from spec_sentinel.pipeline import ScanArtifacts
 
 ROOT = Path(__file__).parents[1]
 
@@ -86,3 +88,32 @@ def test_openai_error_summary_includes_only_safe_error_code() -> None:
 
     CodedOpenAIError.code = "unsafe secret with spaces"
     assert _openai_error_summary(CodedOpenAIError("private")) == "CodedOpenAIError (HTTP 429)"
+
+
+def test_agentic_json_scan_keeps_live_progress_enabled(tmp_path: Path, monkeypatch) -> None:
+    observed: dict[str, bool] = {}
+
+    def fake_execute_scan(*args, show_progress: bool, **kwargs) -> ScanArtifacts:
+        del args, kwargs
+        observed["show_progress"] = show_progress
+        return ScanArtifacts(
+            repository=tmp_path,
+            claims=[],
+            results=[],
+            mechanical_claim_ids=frozenset(),
+            patches=[],
+            security_findings=[],
+            warnings=[],
+            skipped_statements=0,
+        )
+
+    monkeypatch.setattr("spec_sentinel.cli._execute_scan", fake_execute_scan)
+
+    invocation = CliRunner().invoke(
+        app,
+        ["scan", str(tmp_path), "--agentic", "--format", "json"],
+    )
+
+    assert invocation.exit_code == 0
+    assert observed == {"show_progress": True}
+    assert json.loads(invocation.stdout)["claims"] == []
