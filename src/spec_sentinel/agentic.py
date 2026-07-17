@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import random
+import time
+from collections.abc import Callable
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Literal
 
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 from pydantic import Field
 
 from spec_sentinel.config import SentinelConfig
@@ -173,6 +176,10 @@ TOOLS = [
     },
 ]
 
+RATE_LIMIT_MAX_RETRIES = 4
+RATE_LIMIT_INITIAL_DELAY_SECONDS = 2.0
+RATE_LIMIT_MAX_DELAY_SECONDS = 30.0
+
 
 class AgenticVerifier:
     def __init__(
@@ -180,10 +187,14 @@ class AgenticVerifier:
         tools: RepositoryTools,
         config: SentinelConfig,
         client: Any | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+        jitter: Callable[[], float] = random.random,
     ) -> None:
         self.tools = tools
         self.config = config
         self.client = client or OpenAI()
+        self.sleep = sleep
+        self.jitter = jitter
 
     def verify(self, claim: Claim) -> VerificationResult:
         search_trail: list[SearchStep] = []
@@ -200,7 +211,7 @@ class AgenticVerifier:
         ]
         steps = 0
         while steps < self.config.max_steps_per_claim:
-            response = self.client.responses.parse(
+            response = self._parse_with_rate_limit_backoff(
                 model=self.config.model,
                 instructions=SYSTEM_INSTRUCTIONS,
                 input=input_items,
@@ -237,6 +248,21 @@ class AgenticVerifier:
             "The per-claim tool-step budget was exhausted before a conclusion.",
             search_trail,
         )
+
+    def _parse_with_rate_limit_backoff(self, **kwargs: Any) -> Any:
+        """Retry transient 429 responses with bounded exponential backoff and jitter."""
+        for retry in range(RATE_LIMIT_MAX_RETRIES + 1):
+            try:
+                return self.client.responses.parse(**kwargs)
+            except RateLimitError:
+                if retry >= RATE_LIMIT_MAX_RETRIES:
+                    raise
+                base_delay = min(
+                    RATE_LIMIT_INITIAL_DELAY_SECONDS * (2**retry),
+                    RATE_LIMIT_MAX_DELAY_SECONDS,
+                )
+                self.sleep(base_delay * (1 + self.jitter()))
+        raise AssertionError("unreachable")
 
     def _execute_tool(self, name: str, raw_arguments: str) -> tuple[str, SearchStep]:
         try:
