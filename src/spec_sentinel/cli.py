@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -21,6 +22,7 @@ app = typer.Typer(no_args_is_help=True, help="Audit documentation claims against
 console = Console()
 progress_console = Console(stderr=True)
 error_console = Console(stderr=True)
+SAFE_ERROR_CODE = re.compile(r"^[A-Za-z0-9_.-]{1,80}$")
 
 
 def _openai_error_summary(error: OpenAIError) -> str:
@@ -29,6 +31,9 @@ def _openai_error_summary(error: OpenAIError) -> str:
     status_code = getattr(error, "status_code", None)
     if isinstance(status_code, int):
         summary += f" (HTTP {status_code})"
+    code = getattr(error, "code", None)
+    if isinstance(code, str) and SAFE_ERROR_CODE.fullmatch(code):
+        summary += f" [{code}]"
     return summary
 
 

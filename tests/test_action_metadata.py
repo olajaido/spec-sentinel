@@ -72,3 +72,17 @@ def test_openai_error_summary_never_echoes_provider_message() -> None:
 
     assert summary == "OpenAIError"
     assert "secret-bearing" not in summary
+
+
+def test_openai_error_summary_includes_only_safe_error_code() -> None:
+    class CodedOpenAIError(OpenAIError):
+        status_code = 429
+        code = "insufficient_quota"
+
+    summary = _openai_error_summary(CodedOpenAIError("private provider details"))
+
+    assert summary == "CodedOpenAIError (HTTP 429) [insufficient_quota]"
+    assert "private provider details" not in summary
+
+    CodedOpenAIError.code = "unsafe secret with spaces"
+    assert _openai_error_summary(CodedOpenAIError("private")) == "CodedOpenAIError (HTTP 429)"

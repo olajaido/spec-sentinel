@@ -192,7 +192,9 @@ class AgenticVerifier:
     ) -> None:
         self.tools = tools
         self.config = config
-        self.client = client or OpenAI()
+        # The scanner owns its bounded backoff policy. Disabling the SDK's nested
+        # retries prevents two retry loops from turning a single 429 into a long hang.
+        self.client = client or OpenAI(max_retries=0)
         self.sleep = sleep
         self.jitter = jitter
 
