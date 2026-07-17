@@ -1,0 +1,89 @@
+openapi: 3.1.0
+info:
+  title: Drifted Shop
+  version: 0.1.0
+paths:
+  /v1/health:
+    get:
+      operationId: health
+      responses:
+        "200": {description: Service is available}
+  /v1/products:
+    get:
+      operationId: list_products
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema: {type: [string, "null"]}
+        - name: page_size
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 100, default: 25}
+      responses:
+        "200": {description: Product collection}
+        "422": {description: Validation error}
+  /v1/products/{product_id}:
+    get:
+      operationId: get_product
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200": {description: Existing product}
+        "404": {description: Product not found}
+  /v1/purchases:
+    post:
+      operationId: create_purchase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PurchaseRequest"}
+      responses:
+        "201": {description: Purchase created}
+        "404": {description: Product not found}
+        "409": {description: Insufficient inventory}
+        "422": {description: Validation error}
+  /v1/purchases/{purchase_id}:
+    get:
+      operationId: get_purchase
+      responses:
+        "200": {description: Purchase}
+        "404": {description: Purchase not found}
+    delete:
+      operationId: delete_purchase
+      responses:
+        "204": {description: Purchase deleted}
+        "404": {description: Purchase not found}
+  /v1/purchases/{purchase_id}/cancel:
+    patch:
+      operationId: cancel_purchase
+      responses:
+        "200": {description: Purchase cancelled}
+        "404": {description: Purchase not found}
+  /v1/categories:
+    get:
+      operationId: list_categories
+      responses:
+        "200": {description: Categories}
+  /v1/stats:
+    get:
+      operationId: stats
+      responses:
+        "200": {description: Store statistics}
+  /v1/webhooks/test:
+    post:
+      operationId: test_webhook
+      responses:
+        "202": {description: Webhook queued}
+components:
+  schemas:
+    PurchaseRequest:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id: {type: string}
+        quantity: {type: integer, minimum: 1, maximum: 10}

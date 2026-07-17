@@ -1,0 +1,41 @@
+name: Spec Sentinel
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  documentation-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the target revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: target
+          persist-credentials: false
+
+      # Keep the executable Action on the trusted base revision. The pull request
+      # checkout above is untrusted evidence and is never installed or executed.
+      - name: Check out the trusted Action revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: .spec-sentinel-action
+          persist-credentials: false
+
+      - name: Audit documentation claims
+        uses: ./.spec-sentinel-action
+        with:
+          repository-root: target
+          path: .
+          github-token: ${{ github.token }}
+          fail-on-new-divergence: "false"
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

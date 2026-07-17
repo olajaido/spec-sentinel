@@ -1,0 +1,270 @@
+name: Spec Sentinel
+description: Report documentation claims newly broken or resolved by a pull request.
+author: Jide Adeluwoye
+
+inputs:
+  repository-root:
+    description: Repository checkout directory, relative to GITHUB_WORKSPACE.
+    required: false
+    default: "."
+  path:
+    description: Scan root, relative to the repository checkout directory.
+    required: false
+    default: "."
+  config:
+    description: Optional config path, relative to the repository checkout directory.
+    required: false
+    default: ""
+  fail-on-new-divergence:
+    description: Fail the check when this change introduces a divergence.
+    required: false
+    default: "false"
+  github-token:
+    description: GITHUB_TOKEN used only by the PR comment step.
+    required: false
+    default: ""
+
+outputs:
+  current-report:
+    description: Absolute path to the current full scan JSON.
+    value: ${{ steps.paths.outputs.current-report }}
+  baseline-report:
+    description: Absolute path to the default-branch baseline scan JSON.
+    value: ${{ steps.paths.outputs.baseline-report }}
+  delta-json:
+    description: Absolute path to the machine-readable delta report.
+    value: ${{ steps.paths.outputs.delta-json }}
+  delta-markdown:
+    description: Absolute path to the sanitized PR summary.
+    value: ${{ steps.paths.outputs.delta-markdown }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up uv
+      uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      with:
+        version: "0.11.16"
+        python-version: "3.12"
+        enable-cache: "true"
+        github-token: ""
+
+    - name: Install Spec Sentinel
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: uv tool install --force "$ACTION_PATH"
+
+    - name: Validate inputs and prepare paths
+      id: paths
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        CURRENT_SHA: ${{ github.sha }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        REPOSITORY_ROOT: ${{ inputs.repository-root }}
+        SCAN_PATH: ${{ inputs.path }}
+        CONFIG_PATH: ${{ inputs.config }}
+      run: |
+        if [[ "$EVENT_NAME" != "pull_request" && "$EVENT_NAME" != "push" ]]; then
+          echo "Spec Sentinel supports pull_request and push events only." >&2
+          exit 2
+        fi
+
+        uv run --no-project python -c '
+        import os
+        from pathlib import Path
+
+        workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+        repository = (workspace / os.environ["REPOSITORY_ROOT"]).resolve()
+        if repository != workspace and workspace not in repository.parents:
+            raise SystemExit("repository-root must stay within GITHUB_WORKSPACE")
+        scan_root = (repository / os.environ["SCAN_PATH"]).resolve()
+        if scan_root != repository and repository not in scan_root.parents:
+            raise SystemExit("path must stay within repository-root")
+        if not scan_root.is_dir():
+            raise SystemExit("path must identify an existing directory")
+        config = os.environ["CONFIG_PATH"]
+        if config:
+            config_path = (repository / config).resolve()
+            if repository not in config_path.parents or not config_path.is_file():
+                raise SystemExit("config must identify a file within repository-root")
+        '
+
+        artifact_dir="$RUNNER_TEMP/spec-sentinel-artifacts-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+        baseline_dir="$RUNNER_TEMP/spec-sentinel-baseline"
+        verdict_cache="$RUNNER_TEMP/spec-sentinel-verdict-cache"
+        mkdir -p "$artifact_dir" "$baseline_dir" "$verdict_cache"
+        if [[ "$EVENT_NAME" == "pull_request" ]]; then
+          baseline_sha="$BASE_SHA"
+        else
+          baseline_sha="$CURRENT_SHA"
+        fi
+        {
+          echo "repository-root=$(cd "$GITHUB_WORKSPACE/$REPOSITORY_ROOT" && pwd -P)"
+          echo "baseline-sha=$baseline_sha"
+          echo "current-report=$artifact_dir/current.json"
+          echo "baseline-report=$baseline_dir/report.json"
+          echo "delta-json=$artifact_dir/delta.json"
+          echo "delta-markdown=$artifact_dir/comment.md"
+          echo "verdict-cache=$verdict_cache"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore agentic verdict cache
+      id: verdict-cache
+      uses: actions/cache/restore@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+      with:
+        path: ${{ steps.paths.outputs.verdict-cache }}
+        key: spec-sentinel-agent-v1-${{ runner.os }}-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: |
+          spec-sentinel-agent-v1-${{ runner.os }}-${{ github.repository_id }}-
+
+    - name: Scan current checkout
+      shell: bash
+      env:
+        REPOSITORY_ROOT: ${{ steps.paths.outputs.repository-root }}
+        SCAN_PATH: ${{ inputs.path }}
+        CONFIG_PATH: ${{ inputs.config }}
+        REPORT_PATH: ${{ steps.paths.outputs.current-report }}
+        VERDICT_CACHE: ${{ steps.paths.outputs.verdict-cache }}
+      run: |
+        cd "$REPOSITORY_ROOT"
+        args=(scan "$SCAN_PATH" --agentic --format json --no-load-dotenv --cache-dir "$VERDICT_CACHE")
+        if [[ -n "$CONFIG_PATH" ]]; then
+          args+=(--config "$CONFIG_PATH")
+        fi
+        spec-sentinel "${args[@]}" > "$REPORT_PATH"
+
+    - name: Stage default-branch baseline
+      if: ${{ github.event_name == 'push' }}
+      shell: bash
+      env:
+        CURRENT_REPORT: ${{ steps.paths.outputs.current-report }}
+        BASELINE_REPORT: ${{ steps.paths.outputs.baseline-report }}
+      run: cp "$CURRENT_REPORT" "$BASELINE_REPORT"
+
+    - name: Save default-branch baseline
+      if: ${{ github.event_name == 'push' }}
+      continue-on-error: true
+      uses: actions/cache/save@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+      with:
+        path: ${{ steps.paths.outputs.baseline-report }}
+        key: spec-sentinel-baseline-v1-${{ github.repository_id }}-${{ steps.paths.outputs.baseline-sha }}
+
+    - name: Restore default-branch baseline
+      if: ${{ github.event_name == 'pull_request' }}
+      id: baseline-cache
+      uses: actions/cache/restore@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+      with:
+        path: ${{ steps.paths.outputs.baseline-report }}
+        key: spec-sentinel-baseline-v1-${{ github.repository_id }}-${{ steps.paths.outputs.baseline-sha }}
+
+    - name: Check out baseline for cold-cache scan
+      if: ${{ github.event_name == 'pull_request' && steps.baseline-cache.outputs.cache-hit != 'true' }}
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        repository: ${{ github.repository }}
+        ref: ${{ steps.paths.outputs.baseline-sha }}
+        path: .spec-sentinel-baseline-source
+        fetch-depth: 1
+        persist-credentials: false
+
+    - name: Scan cold baseline
+      if: ${{ github.event_name == 'pull_request' && steps.baseline-cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      env:
+        BASELINE_ROOT: ${{ github.workspace }}/.spec-sentinel-baseline-source
+        SCAN_PATH: ${{ inputs.path }}
+        CONFIG_PATH: ${{ inputs.config }}
+        REPORT_PATH: ${{ steps.paths.outputs.baseline-report }}
+        VERDICT_CACHE: ${{ steps.paths.outputs.verdict-cache }}
+      run: |
+        cd "$BASELINE_ROOT"
+        args=(scan "$SCAN_PATH" --agentic --format json --no-load-dotenv --cache-dir "$VERDICT_CACHE")
+        if [[ -n "$CONFIG_PATH" ]]; then
+          args+=(--config "$CONFIG_PATH")
+        fi
+        spec-sentinel "${args[@]}" > "$REPORT_PATH"
+
+    - name: Save cold baseline
+      if: ${{ github.event_name == 'pull_request' && steps.baseline-cache.outputs.cache-hit != 'true' }}
+      continue-on-error: true
+      uses: actions/cache/save@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+      with:
+        path: ${{ steps.paths.outputs.baseline-report }}
+        key: spec-sentinel-baseline-v1-${{ github.repository_id }}-${{ steps.paths.outputs.baseline-sha }}
+
+    - name: Build pull-request delta
+      if: ${{ github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        BASELINE_REPORT: ${{ steps.paths.outputs.baseline-report }}
+        CURRENT_REPORT: ${{ steps.paths.outputs.current-report }}
+        DELTA_JSON: ${{ steps.paths.outputs.delta-json }}
+        DELTA_MARKDOWN: ${{ steps.paths.outputs.delta-markdown }}
+      run: |
+        spec-sentinel delta "$BASELINE_REPORT" "$CURRENT_REPORT" --format json > "$DELTA_JSON"
+        spec-sentinel delta "$BASELINE_REPORT" "$CURRENT_REPORT" --format md > "$DELTA_MARKDOWN"
+
+    - name: Update persistent pull-request comment
+      if: ${{ github.event_name == 'pull_request' && inputs.github-token != '' }}
+      uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+      env:
+        COMMENT_PATH: ${{ steps.paths.outputs.delta-markdown }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs')
+          const marker = '<!-- spec-sentinel-report -->'
+          const body = fs.readFileSync(process.env.COMMENT_PATH, 'utf8')
+          if (!body.startsWith(marker)) {
+            core.setFailed('Refusing to publish an unmarked Spec Sentinel report')
+            return
+          }
+          const viewer = await github.rest.users.getAuthenticated()
+          const comments = await github.paginate(github.rest.issues.listComments, {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            per_page: 100,
+          })
+          const existing = comments.find(comment =>
+            comment.user?.login === viewer.data.login && comment.body?.startsWith(marker)
+          )
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            })
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            })
+          }
+
+    - name: Save agentic verdict cache
+      if: ${{ always() }}
+      continue-on-error: true
+      uses: actions/cache/save@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+      with:
+        path: ${{ steps.paths.outputs.verdict-cache }}
+        key: spec-sentinel-agent-v1-${{ runner.os }}-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+    - name: Enforce new-divergence policy
+      if: ${{ github.event_name == 'pull_request' && inputs.fail-on-new-divergence == 'true' }}
+      shell: bash
+      env:
+        BASELINE_REPORT: ${{ steps.paths.outputs.baseline-report }}
+        CURRENT_REPORT: ${{ steps.paths.outputs.current-report }}
+      run: |
+        spec-sentinel delta "$BASELINE_REPORT" "$CURRENT_REPORT" \
+          --format json --fail-on-new-divergence > /dev/null
+
+branding:
+  icon: shield
+  color: purple

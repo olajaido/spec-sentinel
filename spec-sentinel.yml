@@ -1,0 +1,20 @@
+docs:
+  - README.md
+  - docs/**/*.md
+scope:
+  - src/**
+  - examples/**/app/**
+  - examples/**/openapi.yaml
+ignore:
+  - docs/product-requirements.md
+  - docs/implementation-plan.md
+  - docs/contracts.md
+include_docstrings: false
+model: gpt-5.6
+reasoning_effort: medium
+diverged_threshold: 0.9
+max_steps_per_claim: 12
+max_concurrent_claims: 4
+max_scan_tokens: 250000
+max_file_bytes: 1000000
+fail_on_new_divergence: false

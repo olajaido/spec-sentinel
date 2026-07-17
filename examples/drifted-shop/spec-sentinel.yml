@@ -1,0 +1,17 @@
+docs:
+  - README.md
+  - docs/**/*.md
+scope:
+  - app/**
+  - tests/**
+  - openapi.yaml
+ignore: []
+include_docstrings: false
+model: gpt-5.6
+reasoning_effort: medium
+diverged_threshold: 0.9
+max_steps_per_claim: 12
+max_concurrent_claims: 4
+max_scan_tokens: 50000
+max_file_bytes: 250000
+fail_on_new_divergence: true
