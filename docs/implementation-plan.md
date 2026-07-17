@@ -17,7 +17,7 @@ The build advances through evidence-backed gates. Dashboard work does not begin 
 | M4 | Complete | Direction gating produces three safe documentation patches and no patch for the `code_suspect` retry claim. |
 | M5 implementation | Complete | Baseline/delta CLI and composite Action are implemented; 34 local tests pass. |
 | M5 live gate | Complete | PR #1 produced exactly one newly broken claim with evidence while suppressing all four baseline divergences. |
-| External validation | Pending | Two unrelated public repositories still need cold-start scans and threshold review. |
+| External validation | In progress | Pact cold-start scan: 46 claims, 33 verified, 2 evidence-backed divergences, 1 not found, and 10 ambiguous; an unchanged rerun made zero model requests. One unrelated public repository remains. |
 | M6 | Pending | Begins only after the live M5 gate. |
 
 ## Contract decisions

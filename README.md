@@ -2,7 +2,7 @@
 
 Spec Sentinel audits documentation claims against a repository's implementation. It prefers deterministic schema checks, uses bounded agentic investigation for behavioural claims, and abstains when the evidence is insufficient.
 
-> Status: P0 core implemented and locally verified. The demo produces 14 verified and exactly 4 diverged claims with no ambiguous results. A live GitHub pull-request run and external-repository validation remain.
+> Status: P0 core and the live pull-request gate are implemented. The demo produces 14 verified and exactly 4 diverged claims with no ambiguous results. The first external validation on Pact extracted 46 claims and found two evidence-backed documentation divergences; one additional unrelated repository remains.
 
 ## Repository layout
 

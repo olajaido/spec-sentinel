@@ -41,3 +41,67 @@ def test_parameter_names_and_past_tense_retries_are_preserved(tmp_path: Path) ->
     assert len(output.claims) == 2
     assert output.claims[0].normalized_assertion.qualifiers["parameter"] == "category"
     assert output.claims[1].normalized_assertion.object == 3
+
+
+def test_extracts_structured_technical_claims_and_skips_future_work(tmp_path: Path) -> None:
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        "# Service\n\n"
+        "## Architecture\n\n"
+        "| Concern | Choice | Reason |\n"
+        "|---|---|---|\n"
+        "| Framework | Next.js 16 App Router | Server Components and API routes |\n\n"
+        "## Execution\n\n"
+        "1. Check pact is `ACTIVE` before execution.\n"
+        "2. `INSERT INTO audit_log` with a SHA-256 hash entry.\n\n"
+        "**State machine:** `DRAFT → ACTIVE → EXECUTED`\n\n"
+        "## Roadmap\n\n"
+        "- Webhook triggers will be added after launch.\n",
+        encoding="utf-8",
+    )
+
+    output = extract_claims(tmp_path, [readme])
+
+    assert [claim.source_locations[0].line for claim in output.claims] == [7, 11, 12, 14]
+    assert output.claims[0].text == "Framework — Next.js 16 App Router"
+    assert output.claims[-1].text == "State machine: `DRAFT → ACTIVE → EXECUTED`"
+    assert all("after launch" not in claim.text for claim in output.claims)
+
+
+def test_requires_without_explicit_parameter_word_is_not_a_parameter_claim(
+    tmp_path: Path,
+) -> None:
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        "Pact requires SQL to enforce relational integrity.\n"
+        "`POST /v1/pacts` requires the `owner_id` parameter.\n",
+        encoding="utf-8",
+    )
+
+    output = extract_claims(tmp_path, [readme])
+
+    assert [claim.type for claim in output.claims] == [
+        ClaimType.BEHAVIOUR,
+        ClaimType.PARAMETER,
+    ]
+    assert "parameter" not in output.claims[0].normalized_assertion.qualifiers
+    assert output.claims[1].normalized_assertion.qualifiers["parameter"] == "owner_id"
+
+
+def test_skips_illustrative_marketing_and_architecture_comparisons(tmp_path: Path) -> None:
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        "**Real-world problems Pact solves:**\n"
+        "- Freelancer submits work → Client accepts → Project closes with an audit trail\n\n"
+        "## Architecture decision\n\n"
+        "- **vs DynamoDB** — relational integrity requires SQL\n"
+        "- Every event is hashed with the previous SHA-256 entry.\n",
+        encoding="utf-8",
+    )
+
+    output = extract_claims(tmp_path, [readme])
+
+    assert [claim.text for claim in output.claims] == [
+        "Every event is hashed with the previous SHA-256 entry."
+    ]
+    assert output.claims[0].type is ClaimType.BEHAVIOUR
