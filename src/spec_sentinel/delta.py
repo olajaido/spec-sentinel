@@ -20,6 +20,7 @@ class ScanArtifact(BaseModel):
     claims: list[Claim]
     results: list[VerificationResult]
     patches: list[PatchProposal] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     pending_claims: int = 0
 
     @classmethod
@@ -44,6 +45,7 @@ class DeltaReport(BaseModel):
     schema_version: str = "1.0"
     newly_broken: list[DeltaFinding] = Field(default_factory=list)
     resolved: list[DeltaFinding] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 def compare_artifacts(baseline: ScanArtifact, current: ScanArtifact) -> DeltaReport:
@@ -111,13 +113,24 @@ def compare_artifacts(baseline: ScanArtifact, current: ScanArtifact) -> DeltaRep
             )
         )
 
-    return DeltaReport(newly_broken=newly_broken, resolved=resolved)
+    return DeltaReport(
+        newly_broken=newly_broken,
+        resolved=resolved,
+        warnings=current.warnings,
+    )
 
 
 def render_markdown(report: DeltaReport) -> str:
     lines = [COMMENT_MARKER, "## Spec Sentinel", ""]
+    if report.warnings:
+        lines.extend(["### ⚠️ Audit warning", ""])
+        lines.extend(f"- <code>{_safe(warning)}</code>" for warning in report.warnings)
+        lines.append("")
     if not report.newly_broken and not report.resolved:
-        lines.append("✅ No documentation claim regressions introduced by this change.")
+        if report.warnings:
+            lines.append("No documentation claim delta was evaluated.")
+        else:
+            lines.append("✅ No documentation claim regressions introduced by this change.")
         return "\n".join(lines) + "\n"
     if report.newly_broken:
         count = len(report.newly_broken)

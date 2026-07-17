@@ -5,6 +5,23 @@ from spec_sentinel.config import SentinelConfig
 from spec_sentinel.models import Verdict, VerificationResult
 
 
+def test_scan_warns_when_no_documentation_files_are_found(tmp_path: Path) -> None:
+    result = pipeline.run_scan(tmp_path, SentinelConfig(), agentic=False)
+
+    assert result.claims == []
+    assert result.warnings == [pipeline.NO_DOCUMENTATION_WARNING]
+    assert result.as_dict()["warnings"] == [pipeline.NO_DOCUMENTATION_WARNING]
+
+
+def test_scan_warns_when_documentation_has_no_testable_claims(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("Welcome to our excellent product.\n", encoding="utf-8")
+
+    result = pipeline.run_scan(tmp_path, SentinelConfig(), agentic=False)
+
+    assert result.claims == []
+    assert result.warnings == [pipeline.NO_TESTABLE_CLAIMS_WARNING]
+
+
 def test_second_agentic_scan_uses_cache(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "repo"
     root.mkdir()

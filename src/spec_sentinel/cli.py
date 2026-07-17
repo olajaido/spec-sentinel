@@ -112,6 +112,8 @@ def _print_terminal_report(artifacts: ScanArtifacts) -> None:
         console.print(f"[bold green]{len(artifacts.patches)} safe patches[/bold green]")
     if artifacts.security_findings:
         console.print(f"[bold red]{len(artifacts.security_findings)} security findings[/bold red]")
+    for warning in artifacts.warnings:
+        console.print(f"[bold yellow]Warning:[/bold yellow] {warning}")
 
 
 @app.command()

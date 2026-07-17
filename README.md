@@ -33,6 +33,8 @@ When the secrets file lives elsewhere, pass it explicitly—for this monorepo fi
 
 CI must use `--no-load-dotenv` so a pull-request checkout cannot supply client configuration such as an alternate API endpoint. The bundled Action sets this automatically.
 
+A README is optional. Configure any Markdown documentation paths through `docs` in `spec-sentinel.yml`. If no documentation files—or no concrete, testable claims—are found, terminal and JSON reports emit an explicit warning, and PR comments show an audit warning instead of a misleading green result.
+
 The demo contains 18 extracted claims. Ten route through committed OpenAPI, where eight verify and two intentionally diverge. The remaining eight route to the behavioural agent, where six verify and two intentionally diverge. Three `docs_stale` findings receive safe unified diffs; the `code_suspect` retry finding never receives a patch.
 
 The verified live run completed in about 39 seconds. An unchanged repeat used eight cached agentic verdicts, made zero model requests, and completed in 0.024 seconds. The demo application tests pass with the intentionally suspect retry behaviour marked as an expected failure.

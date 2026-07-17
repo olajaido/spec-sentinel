@@ -21,6 +21,14 @@ from spec_sentinel.openapi import OpenApiDocument, OpenApiVerifier
 from spec_sentinel.patches import generate_doc_patch
 from spec_sentinel.security import scan_injection_attempts
 
+NO_DOCUMENTATION_WARNING = (
+    "No documentation files found. Configure documentation paths in spec-sentinel.yml."
+)
+NO_TESTABLE_CLAIMS_WARNING = (
+    "No testable documentation found. Add concrete API or behavioural claims, or configure "
+    "documentation paths in spec-sentinel.yml."
+)
+
 
 @dataclass(frozen=True)
 class ScanArtifacts:
@@ -30,6 +38,7 @@ class ScanArtifacts:
     mechanical_claim_ids: frozenset[str]
     patches: list[PatchProposal]
     security_findings: list[SecurityFinding]
+    warnings: list[str]
     skipped_statements: int
     cache_hits: int = 0
     cache_misses: int = 0
@@ -58,6 +67,7 @@ class ScanArtifacts:
             "security_findings": [
                 finding.model_dump(mode="json") for finding in self.security_findings
             ],
+            "warnings": self.warnings,
             "skipped_statements": self.skipped_statements,
             "pending_claims": self.pending_claims,
             "cache": {
@@ -95,6 +105,11 @@ def run_scan(
     docs = discover_docs(root, config)
     scope = discover_scope(root, config)
     extraction = extract_claims(root, docs)
+    warnings: list[str] = []
+    if not docs:
+        warnings.append(NO_DOCUMENTATION_WARNING)
+    elif not extraction.claims:
+        warnings.append(NO_TESTABLE_CLAIMS_WARNING)
     scan_files = sorted(set(docs + scope))
     security_findings = scan_injection_attempts(root, scan_files)
 
@@ -200,6 +215,7 @@ def run_scan(
         mechanical_claim_ids=frozenset(mechanical_claim_ids),
         patches=patches,
         security_findings=security_findings,
+        warnings=warnings,
         skipped_statements=extraction.skipped_statements,
         cache_hits=cache_hits,
         cache_misses=cache_misses,

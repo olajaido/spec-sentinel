@@ -15,8 +15,9 @@ The build advances through evidence-backed gates. Dashboard work does not begin 
 | M0–M2 | Complete | Stable contracts, 18-claim fixture, deterministic OpenAPI path, and model verdict firewall are covered by tests. |
 | M3 | Complete | Live agentic scan returned 14 verified / 4 diverged / 0 ambiguous; unchanged rerun made zero model requests. |
 | M4 | Complete | Direction gating produces three safe documentation patches and no patch for the `code_suspect` retry claim. |
-| M5 implementation | Complete | Baseline/delta CLI and composite Action are implemented; 31 local tests pass. |
-| M5 live gate | Pending | The local repository has no commits or GitHub remote, so a real PR comment and two external-repository validations still require publishing it. |
+| M5 implementation | Complete | Baseline/delta CLI and composite Action are implemented; 34 local tests pass. |
+| M5 live gate | Complete | PR #1 produced exactly one newly broken claim with evidence while suppressing all four baseline divergences. |
+| External validation | Pending | Two unrelated public repositories still need cold-start scans and threshold review. |
 | M6 | Pending | Begins only after the live M5 gate. |
 
 ## Contract decisions

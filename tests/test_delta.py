@@ -66,12 +66,15 @@ def result(item: Claim, verdict: Verdict) -> VerificationResult:
     )
 
 
-def artifact(items: list[tuple[Claim, Verdict]], *, pending: int = 0) -> ScanArtifact:
+def artifact(
+    items: list[tuple[Claim, Verdict]], *, pending: int = 0, warnings: list[str] | None = None
+) -> ScanArtifact:
     return ScanArtifact(
         schema_version="1.0",
         claims=[item for item, _ in items],
         results=[result(item, verdict) for item, verdict in items],
         pending_claims=pending,
+        warnings=warnings or [],
     )
 
 
@@ -142,6 +145,18 @@ def test_markdown_escapes_repository_controlled_content() -> None:
     assert "<script>" not in markdown
     assert "&lt;script&gt;" in markdown
     assert "&#96;owned&#96;" in markdown
+
+
+def test_markdown_warns_instead_of_showing_green_when_nothing_was_audited() -> None:
+    warning = "No testable documentation found. Configure documentation paths."
+    report = compare_artifacts(artifact([]), artifact([], warnings=[warning]))
+
+    markdown = render_markdown(report)
+
+    assert "⚠️ Audit warning" in markdown
+    assert warning in markdown
+    assert "No documentation claim delta was evaluated." in markdown
+    assert "✅" not in markdown
 
 
 def test_delta_cli_can_fail_on_new_divergence(tmp_path: Path) -> None:
